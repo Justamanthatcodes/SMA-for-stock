@@ -1,19 +1,34 @@
 import yfinance as yf
 import pandas as pd
+import matplotlib.pyplot as plt
 
 def get_data(ticker, start, end):
     data = yf.download(ticker, start=start, end=end)
     return data
 
-df = get_data("AAPL", "2020-01-01", "2025-01-01") #YMD 
-print(df.head(10))
-#df.to_csv("APPL_data.csv")
-
-def add_signal(df):
-    df["SMA_50"] = df["Close"].rolling(window=50).mean()
+def add_indicator(df):
     df["SMA_20"] = df["Close"].rolling(window=20).mean()
+    df["SMA_50"] = df["Close"].rolling(window=50).mean()
     return df
 
-df = add_signal(df)
-print(df[["Close", "SMA_50", "SMA_20"]].head(60))
+def generate_signals(df):
+    df["Signal"] = 0
+    df.loc[df["SMA_20"] > df["SMA_50"], "Signal"] = 1
+    df.loc[df["SMA_20"] < df["SMA_50"], "Signal"] = -1
+    return df
 
+df = get_data("AAPL", "2020-01-01", "2025-01-01")
+df = add_indicator(df)
+df = generate_signals(df)
+#df[["Close", "SMA_20", "SMA_50", "Signal"]].to_csv("signals.csv")
+#print("saved!")
+
+def calculate_returns(df):
+    df["Daily_Return"] = df["Close"].pct_change()
+    df["Strategy_Return"] = df["Daily_Return"] * df["Signal"].shift(1)
+    df["Cumulative_Market"] = (1 + df["Daily_Return"]).cumprod()
+    df["Cumulative_Strategy"] = (1 + df["Strategy_Return"]).cumprod()
+    return df
+
+df = calculate_returns(df)
+print(df[["Close", "Signal", "Daily_Return", "Strategy_Return", "Cumulative_Strategy", "Cumulative_Market"]].tail(10))
