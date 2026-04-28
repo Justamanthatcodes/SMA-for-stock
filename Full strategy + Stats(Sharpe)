@@ -1,0 +1,72 @@
+import yfinance as yf
+import pandas as pd
+import matplotlib.pyplot as plt
+
+def get_data(ticker, start, end):
+    data = yf.download(ticker, start=start, end=end)
+    return data
+
+def add_indicator(df):
+    df["SMA_20"] = df["Close"].rolling(window=20).mean()
+    df["SMA_50"] = df["Close"].rolling(window=50).mean()
+    return df
+
+def generate_signals(df):
+    df["Signal"] = 0
+    df.loc[df["SMA_20"] > df["SMA_50"], "Signal"] = 1
+    df.loc[df["SMA_20"] < df["SMA_50"], "Signal"] = -1
+    return df
+
+def calculate_returns(df):
+    df["Daily_Return"] = df["Close"].pct_change()
+    df["Strategy_Return"] = df["Daily_Return"] * df["Signal"].shift(1)
+    df["Cumulative_Market"] = (1 + df["Daily_Return"]).cumprod()
+    df["Cumulative_Strategy"] = (1 + df["Strategy_Return"]).cumprod()
+    return df
+
+def calculate_metrics(df):
+    total_days = len(df)
+    years = total_days / 252
+    cagr = (df["Cumulative_Strategy"].iloc[-1] ** (1 / years)) - 1
+    sharpe = (df["Strategy_Return"].mean() / df["Strategy_Return"].std()) * (252 ** 0.5)
+    rolling_max = df["Cumulative_Strategy"].cummax()
+    drawdown = (df["Cumulative_Strategy"] - rolling_max) / rolling_max
+    max_drawdown = drawdown.min()
+    print(f"CAGR: {cagr:.2%}")
+    print(f"Sharpe Ratio: {sharpe:.2f}")
+    print(f"Max Drawdown: {max_drawdown:.2%}")
+
+def plot_results(df):
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 8))
+
+    # Top chart - price and SMAs
+    ax1.plot(df.index, df["Close"], label="AAPL Price", color="white", linewidth=1)
+    ax1.plot(df.index, df["SMA_20"], label="SMA 20", color="cyan", linewidth=1)
+    ax1.plot(df.index, df["SMA_50"], label="SMA 50", color="orange", linewidth=1)
+
+    # Buy and sell signals
+    ax1.scatter(df[df["Signal"] == 1].index, df[df["Signal"] == 1]["Close"], marker="^", color="lime", s=15, label="Buy")
+    ax1.scatter(df[df["Signal"] == -1].index, df[df["Signal"] == -1]["Close"], marker="v", color="red", s=15, label="Sell")
+
+    ax1.set_title("AAPL Price with SMA Crossover Signals", color="white")
+    ax1.legend()
+    ax1.set_facecolor("#0a0a0f")
+
+    # Bottom chart - cumulative returns
+    ax2.plot(df.index, df["Cumulative_Strategy"], label="Strategy", color="cyan", linewidth=1)
+    ax2.plot(df.index, df["Cumulative_Market"], label="Buy & Hold", color="orange", linewidth=1)
+    ax2.set_title("Strategy vs Buy & Hold", color="white")
+    ax2.legend()
+    ax2.set_facecolor("#0a0a0f")
+
+    fig.patch.set_facecolor("#0a0a0f")
+    plt.tight_layout()
+    plt.show()
+
+df = get_data("AAPL", "2020-01-01", "2025-01-01")
+df = add_indicator(df)
+df = generate_signals(df)
+df = calculate_returns(df)
+df.to_csv(r"C:\Quant\full_results.csv")
+calculate_metrics(df)
+plot_results(df)
